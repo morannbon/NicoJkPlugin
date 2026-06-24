@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <Platforms>AnyCPU;x64</Platforms>
+    <OutputType>Library</OutputType>
+    <RootNamespace>NicoJkPlugin</RootNamespace>
+    <AssemblyName>NicoJkPlugin</AssemblyName>
+    <Version>1.0.0</Version>
+    <FileVersion>1.0.0.0</FileVersion>
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
+    <TvAIrPluginSdkVersion>0.11.315</TvAIrPluginSdkVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\TvAIrPluginSdk\src\TvAIrPlugin\TvAIrPlugin.csproj" Private="false" />
+    <PackageReference Include="System.Text.Encoding.CodePages" Version="8.0.0" />
+  </ItemGroup>
+
+
+  <Target Name="CopyPluginToDeploy" AfterTargets="Build">
+    <MakeDir Directories="$(MSBuildProjectDirectory)\..\deploy" />
+    <Copy SourceFiles="$(TargetPath)" DestinationFiles="$(MSBuildProjectDirectory)\..\deploy\NicoJkPlugin.dll" />
+  </Target>
+</Project>

@@ -1,0 +1,34 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NicoJkPlugin", "NicoJkPlugin\NicoJkPlugin.csproj", "{B3F0E9C8-09EE-4C9C-A3F9-2E7FE9C4F075}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TvAIrPlugin", "TvAIrPluginSdk\src\TvAIrPlugin\TvAIrPlugin.csproj", "{9F0679A9-56C0-4B49-B31E-0A70A84C5315}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Debug|x64 = Debug|x64
+		Release|Any CPU = Release|Any CPU
+		Release|x64 = Release|x64
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{B3F0E9C8-09EE-4C9C-A3F9-2E7FE9C4F075}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B3F0E9C8-09EE-4C9C-A3F9-2E7FE9C4F075}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B3F0E9C8-09EE-4C9C-A3F9-2E7FE9C4F075}.Debug|x64.ActiveCfg = Debug|x64
+		{B3F0E9C8-09EE-4C9C-A3F9-2E7FE9C4F075}.Debug|x64.Build.0 = Debug|x64
+		{B3F0E9C8-09EE-4C9C-A3F9-2E7FE9C4F075}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B3F0E9C8-09EE-4C9C-A3F9-2E7FE9C4F075}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B3F0E9C8-09EE-4C9C-A3F9-2E7FE9C4F075}.Release|x64.ActiveCfg = Release|x64
+		{B3F0E9C8-09EE-4C9C-A3F9-2E7FE9C4F075}.Release|x64.Build.0 = Release|x64
+		{9F0679A9-56C0-4B49-B31E-0A70A84C5315}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9F0679A9-56C0-4B49-B31E-0A70A84C5315}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9F0679A9-56C0-4B49-B31E-0A70A84C5315}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{9F0679A9-56C0-4B49-B31E-0A70A84C5315}.Debug|x64.Build.0 = Debug|Any CPU
+		{9F0679A9-56C0-4B49-B31E-0A70A84C5315}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9F0679A9-56C0-4B49-B31E-0A70A84C5315}.Release|Any CPU.Build.0 = Release|Any CPU
+		{9F0679A9-56C0-4B49-B31E-0A70A84C5315}.Release|x64.ActiveCfg = Release|Any CPU
+		{9F0679A9-56C0-4B49-B31E-0A70A84C5315}.Release|x64.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal
