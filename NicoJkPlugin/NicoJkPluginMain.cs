@@ -42,10 +42,11 @@ public sealed class NicoJkPluginMain : ITvAIrPlugin, IUiPlugin, IManifestPlugin
         Name = PluginIdentity.Name,
         Version = PluginIdentity.Version,
         Vendor = "NicoJkPlugin",
-        HostContractVersion = "0.11.315",
+        HostContractVersion = TvAIrPluginSdkContract.HostContractVersion,
+        SdkVersion = TvAIrPluginSdkContract.SdkVersion,
         Route = "nicojk",
         DefaultRoute = "nicojk",
-        Entry = "NicoJkPlugin.dll",
+        Entry = "NicoJkPlugin.NicoJkPluginMain",
         Description = "TvAIr上でニコニコ実況コメント連携を行うためのTvAIrプラグインです。",
         PreferredOpenMode = "toolWindow",
         DefaultMenuActionKind = "toolWindow",
@@ -58,17 +59,20 @@ public sealed class NicoJkPluginMain : ITvAIrPlugin, IUiPlugin, IManifestPlugin
         ToolWindowShowInTaskbar = false,
         Capabilities = new[]
         {
-            "ui",
-            "companion",
-            "live-comment",
-            "recording-session-watch",
-            "comment-normalization"
+            "ShowUi",
+            "OpenToolWindow",
+            "UseWindowApi",
+            "UseSafeEvent",
+            "ReadReservations",
+            "ReadTunerStatus",
+            "ReadChannels",
+            "ReadRecordingStatus"
         },
         Tags = new[]
         {
             "nicojk",
-            "nx-jikkyo",
-            "comments",
+            "live-comments",
+            "host-managed-toolwindow",
             "recording"
         },
         Kind = new[]
@@ -85,7 +89,8 @@ public sealed class NicoJkPluginMain : ITvAIrPlugin, IUiPlugin, IManifestPlugin
             PluginPermission.ReadTunerStatus,
             PluginPermission.ReadChannels,
             PluginPermission.ReadRecordingStatus,
-            PluginPermission.ReadHostContracts
+            PluginPermission.UseWindowApi,
+            PluginPermission.UseSafeEvent
         }
     };
 
@@ -95,8 +100,7 @@ public sealed class NicoJkPluginMain : ITvAIrPlugin, IUiPlugin, IManifestPlugin
         _settings = PluginSettings.Load(context, Log);
         _resolver = new JkChannelResolver(_settings, Log);
         _publisher = new LiveCommentPublisher(context);
-        SdkHostContractProbe.LogIfAvailable(context, Log);
-        Log($"[NicoJkPlugin] Initialize 完了 v{Version} hostContract=0.11.315 manifestDefaultMenuActionKind=toolWindow uiDefaultMenuActionKind=toolWindow releaseVersionPinned=True");
+        Log($"[NicoJkPlugin] Initialize completed v{Version}");
     }
 
     public void OnStart()
@@ -127,7 +131,7 @@ public sealed class NicoJkPluginMain : ITvAIrPlugin, IUiPlugin, IManifestPlugin
         return """
 <div class="nicojk-about" style="font-family:system-ui,'Yu Gothic UI','Meiryo',sans-serif;padding:18px 20px;line-height:1.55;color:#222;box-sizing:border-box;">
   <div style="font-size:20px;font-weight:700;margin-bottom:4px;">NicoJkPlugin</div>
-  <div style="font-size:13px;margin-bottom:14px;">Version: 1.0.0</div>
+  <div style="font-size:13px;margin-bottom:14px;">Version: 1.0.1</div>
   <div style="font-size:13px;">
     TvAIr上でニコニコ実況コメント連携を行うためのTvAIrプラグインです。<br>
     TVTest用プラグイン NicoJK 本体の同梱版、改変版、後継版ではありません。

@@ -1,0 +1,33 @@
+{
+  "id": "nicojk",
+  "name": "NicoJK",
+  "version": "1.0.1",
+  "route": "nicojk",
+  "entry": "NicoJkPlugin.dll",
+  "hostContractVersion": "1.0.0",
+  "sdkVersion": "1.0.0",
+  "kind": ["UI"],
+  "description": "NicoJKコメント連携プラグイン",
+  "vendor": "NicoJK Plugin Team",
+  "capabilities": ["ShowUi", "OpenToolWindow", "UseWindowApi", "UseSafeEvent", "ReadReservations", "ReadTunerStatus", "ReadChannels", "ReadRecordingStatus"],
+  "permissions": ["ShowUi", "OpenToolWindow", "UseWindowApi", "UseSafeEvent", "ReadReservations", "ReadTunerStatus", "ReadChannels", "ReadRecordingStatus"],
+  "tags": ["official", "nicojk", "live-comments", "host-managed-toolwindow"],
+  "ui": {
+    "mode": "toolWindow",
+    "route": "nicojk"
+  },
+  "menu": {
+    "defaultMenuActionKind": "toolWindow",
+    "defaultMenuActionLabel": "NicoJK",
+    "defaultMenuActionPriority": 700
+  },
+  "window": {
+    "width": 420,
+    "height": 260,
+    "minWidth": 360,
+    "minHeight": 220,
+    "reuseExisting": true,
+    "activateExisting": true,
+    "showInTaskbar": false
+  }
+}

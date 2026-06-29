@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>TvAIrPlugin</RootNamespace>
+    <AssemblyName>TvAIrPlugin</AssemblyName>
+    <Version>$(TvAIrPluginSdkVersion)</Version>
+    <FileVersion>$(TvAIrPluginSdkVersion).0</FileVersion>
+    <AssemblyVersion>$(TvAIrPluginSdkAssemblyVersion)</AssemblyVersion>
+    <InformationalVersion>$(TvAIrPluginSdkVersion)</InformationalVersion>
+    <OutputType>Library</OutputType>
+  </PropertyGroup>
+</Project>

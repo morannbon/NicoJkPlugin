@@ -4,7 +4,7 @@ VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NicoJkPlugin", "NicoJkPlugin\NicoJkPlugin.csproj", "{B3F0E9C8-09EE-4C9C-A3F9-2E7FE9C4F075}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TvAIrPlugin", "TvAIrPluginSdk\src\TvAIrPlugin\TvAIrPlugin.csproj", "{9F0679A9-56C0-4B49-B31E-0A70A84C5315}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TvAIrPlugin", "TvAIrPlugin\TvAIrPlugin.csproj", "{9F0679A9-56C0-4B49-B31E-0A70A84C5315}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
