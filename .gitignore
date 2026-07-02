@@ -1,30 +1,13 @@
-# Visual Studio
 .vs/
-*.user
-*.suo
-*.userosscache
-*.sln.docstates
-*.rsuser
-
-# Build outputs
 bin/
 obj/
-_bin/
-_obj/
-deploy/
-
-# NuGet and packages
-*.nupkg
-*.snupkg
-packages/
-
-# Logs and test outputs
+*.user
+*.suo
+*.cache
 *.log
-TestResults/
-
-# OS/editor files
-.DS_Store
-Thumbs.db
-
-# NicoJkPlugin local settings
-NicoJkPlugin.ini
+*.bak
+*.tmp
+*.orig
+*.rej
+*.patch
+*.zip

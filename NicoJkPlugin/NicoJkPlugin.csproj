@@ -19,9 +19,17 @@
     <PackageReference Include="System.Text.Encoding.CodePages" Version="8.0.0" />
   </ItemGroup>
 
-  <Target Name="CopyPluginToDeploy" AfterTargets="Build">
-    <MakeDir Directories="$(MSBuildProjectDirectory)\..\deploy" />
-    <Copy SourceFiles="$(TargetPath)" DestinationFiles="$(MSBuildProjectDirectory)\..\deploy\NicoJkPlugin.dll" />
-    <Copy SourceFiles="$(MSBuildProjectDirectory)\..\plugin.json" DestinationFiles="$(MSBuildProjectDirectory)\..\deploy\plugin.json" Condition="Exists('$(MSBuildProjectDirectory)\..\plugin.json')" />
+  <PropertyGroup>
+    <TvAIrPluginDeployDir Condition="'$(TvAIrPluginDeployDir)' == ''"></TvAIrPluginDeployDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\plugin.json" Link="plugin.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <Target Name="DeployPluginForLocalTest" AfterTargets="Build" Condition="'$(TvAIrPluginDeployDir)' != ''">
+    <MakeDir Directories="$(TvAIrPluginDeployDir)" />
+    <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(TvAIrPluginDeployDir)" />
+    <Copy SourceFiles="$(MSBuildProjectDirectory)\..\plugin.json" DestinationFolder="$(TvAIrPluginDeployDir)" Condition="Exists('$(MSBuildProjectDirectory)\..\plugin.json')" />
   </Target>
 </Project>
