@@ -19,7 +19,7 @@ internal sealed class JkChannelResolver
             else _explicitName[Norm(kv.Key)] = kv.Value;
         }
         if (settings.EnableTvTestChannelAutoMapping)
-            LoadCh2(settings.Ch2Files);
+            LoadCh2(settings.Ch2Files, log);
         log($"[ChannelMap] 初期化: explicitTriplets={_explicitTriplet.Count} explicitNames={_explicitName.Count} serviceMaps={settings.ServiceChannelMapping.Count} ch2Entries={_ch2Triplets.Count} ch2TerrestrialSidMaps={_terrestrialServiceJk.Count} nationwideMaster=enabled");
     }
 
@@ -68,11 +68,22 @@ internal sealed class JkChannelResolver
         return null;
     }
 
-    private void LoadCh2(IEnumerable<string> files)
+    private void LoadCh2(IEnumerable<string> files, Action<string> log)
     {
         foreach (var file in files)
         {
-            foreach (var raw in File.ReadLines(file))
+            IReadOnlyList<string> lines;
+            try
+            {
+                lines = IniDocument.ReadAllLinesSmart(file);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                log($"[ChannelMap] チャンネル設定を読み込めません: path={file} error={ex.GetType().Name}: {ex.Message} 継続します");
+                continue;
+            }
+
+            foreach (var raw in lines)
             {
                 var line = raw.Trim();
                 if (line.Length == 0 || line.StartsWith(';') || line.StartsWith('#')) continue;
@@ -221,8 +232,7 @@ internal sealed class JkChannelResolver
         if (IsTerrestrial(nid)) return true;
         if (IsBsCs(nid)) return false;
 
-        // ID欠落時の救済は残す。ただし、明らかなBS/CS局名を地上波系列へ誤写像しない。
-        // この判定はチャンネルマッピング内だけに閉じ、セッション監視・コメント配信の出口には触れない。
+        // ID欠落時のみ局名を補助情報として使い、明らかなBS/CS局名を地上波系列へ誤写像しない。
         if (nid == 0 && sid == 0)
         {
             var n = Norm(serviceName);

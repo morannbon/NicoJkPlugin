@@ -1,17 +1,47 @@
 {
   "id": "nicojk",
   "name": "NicoJK",
-  "version": "1.0.1",
+  "version": "1.0.3",
   "route": "nicojk",
   "entry": "NicoJkPlugin.dll",
-  "hostContractVersion": "1.0.0",
-  "sdkVersion": "1.0.0",
-  "kind": ["UI"],
+  "hostContractVersion": "1.1.5",
+  "sdkVersion": "1.1.5",
+  "kind": [
+    "UI"
+  ],
   "description": "NicoJKコメント連携プラグイン",
   "vendor": "NicoJK Plugin Team",
-  "capabilities": ["ShowUi", "OpenToolWindow", "UseWindowApi", "UseSafeEvent", "ReadReservations", "ReadTunerStatus", "ReadChannels", "ReadRecordingStatus"],
-  "permissions": ["ShowUi", "OpenToolWindow", "UseWindowApi", "UseSafeEvent", "ReadReservations", "ReadTunerStatus", "ReadChannels", "ReadRecordingStatus"],
-  "tags": ["official", "nicojk", "live-comments", "host-managed-toolwindow"],
+  "capabilities": [
+    "ShowUi",
+    "OpenToolWindow",
+    "UseWindowApi",
+    "UseSafeEvent",
+    "ReadChannels",
+    "ReadRecordingStatus",
+    "WriteLogs",
+    "ReadSafePaths",
+    "TimedTextStreams",
+    "VideoOverlay.Write"
+  ],
+  "permissions": [
+    "ShowUi",
+    "OpenToolWindow",
+    "UseWindowApi",
+    "UseSafeEvent",
+    "ReadChannels",
+    "ReadRecordingStatus",
+    "WriteLogs",
+    "ReadSafePaths",
+    "ReadViewerSessions",
+    "WriteVideoOverlay"
+  ],
+  "tags": [
+    "official",
+    "nicojk",
+    "timed-text",
+    "video-overlay",
+    "host-managed-toolwindow"
+  ],
   "ui": {
     "mode": "toolWindow",
     "route": "nicojk"

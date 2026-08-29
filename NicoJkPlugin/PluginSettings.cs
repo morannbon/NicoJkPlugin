@@ -1,7 +1,6 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Reflection;
 using System.Text.RegularExpressions;
-using TvAIrPlugin;
 
 namespace NicoJkPlugin;
 
@@ -13,52 +12,54 @@ internal sealed class PluginSettings
     public bool DropForwardedComment { get; private set; } = true;
     public int BacklogCount { get; private set; } = 200;
     public int PastToleranceSeconds { get; private set; } = 120;
-    public bool EnablePastLogMerge { get; private set; } = false;
-    public bool EnableLivePastLogCatchUp { get; private set; } = false;
     public bool EnableTvTestChannelAutoMapping { get; private set; } = true;
     public Dictionary<string, int> ChannelMapping { get; } = new(StringComparer.OrdinalIgnoreCase);
     public Dictionary<int, int> ServiceChannelMapping { get; } = new();
     public List<string> Ch2Files { get; } = new();
 
-    public static PluginSettings Load(IPluginContext context, Action<string> log)
+    public static PluginSettings Load(string appDirectory, string dataDirectory, Action<string> log)
     {
         var s = new PluginSettings();
         var pluginDir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location) ?? AppContext.BaseDirectory;
         var localIni = Path.Combine(pluginDir, "NicoJkPlugin.ini");
-        var text = File.Exists(localIni) ? IniDocument.ReadTextSmart(localIni) : context.ReadPluginFile("NicoJkPlugin.ini");
-        var ini = IniDocument.ParseText(text);
+        if (!IniDocument.TryLoad(localIni, out var ini, out var localIniError))
+            log($"[Settings] 設定ファイルを読み込めません: path={localIni} error={localIniError!.GetType().Name}: {localIniError.Message} 継続します");
 
         s.BacklogCount = ini.GetInt("General", "BacklogCommentRequestCount", s.BacklogCount, 0, 1000);
         s.PastToleranceSeconds = ini.GetInt("General", "TimeshiftPastToleranceSeconds", s.PastToleranceSeconds, 0, 600);
-        s.EnablePastLogMerge = false;
-        s.EnableLivePastLogCatchUp = false;
         s.EnableTvTestChannelAutoMapping = ini.GetBool("General", "EnableTvTestChannelAutoMapping", true);
 
         ReadChannelMappingSection(ini.Section("ChannelMapping"), s, allowTripletNameMap: true);
 
-        var nicoIniPath = ResolveNicoJkIniPath(ini, context, pluginDir, log);
+        var nicoIniPath = ResolveNicoJkIniPath(ini, appDirectory, dataDirectory, pluginDir, log);
         if (!string.IsNullOrEmpty(nicoIniPath) && File.Exists(nicoIniPath))
         {
-            var nico = IniDocument.Load(nicoIniPath);
-            var folder = nico.Get("Setting", "logfileFolder", nico.Get("Settings", "logfileFolder"));
-            if (!string.IsNullOrWhiteSpace(folder))
+            if (!IniDocument.TryLoad(nicoIniPath, out var nico, out var nicoIniError))
             {
-                var baseDir = Path.GetDirectoryName(nicoIniPath) ?? pluginDir;
-                s.LogDirectory = NormalizePath(folder, baseDir);
+                log($"[Settings] NicoJK.iniを読み込めません: path={nicoIniPath} error={nicoIniError!.GetType().Name}: {nicoIniError.Message} 継続します");
             }
+            else
+            {
+                var folder = nico.Get("Setting", "logfileFolder", nico.Get("Settings", "logfileFolder"));
+                if (!string.IsNullOrWhiteSpace(folder))
+                {
+                    var baseDir = Path.GetDirectoryName(nicoIniPath) ?? pluginDir;
+                    s.LogDirectory = NormalizePath(folder, baseDir);
+                }
 
-            var refuge = NormalizeIniValue(nico.Get("Setting", "refugeUri", nico.Get("Settings", "refugeUri")));
-            if (IsTrustedRefugeUri(refuge)) s.RefugeUri = refuge;
-            s.DropForwardedComment = nico.GetBool("Setting", "dropForwardedComment", nico.GetBool("Settings", "dropForwardedComment", true));
-            ReadChannelMappingSection(nico.Section("Channels"), s, allowTripletNameMap: false);
-            foreach (var mapFile in FindNicoJkChannelListFiles(nicoIniPath, pluginDir, context))
-                ReadJkChannelListFile(mapFile, s, log);
-            log($"[Settings] NicoJK.ini 読み込み: {nicoIniPath}");
-            if (!string.IsNullOrWhiteSpace(s.LogDirectory)) log($"[Settings] logfileFolder={s.LogDirectory}");
+                var refuge = NormalizeIniValue(nico.Get("Setting", "refugeUri", nico.Get("Settings", "refugeUri")));
+                if (IsTrustedRefugeUri(refuge)) s.RefugeUri = refuge;
+                s.DropForwardedComment = nico.GetBool("Setting", "dropForwardedComment", nico.GetBool("Settings", "dropForwardedComment", true));
+                ReadChannelMappingSection(nico.Section("Channels"), s, allowTripletNameMap: false);
+                foreach (var mapFile in FindNicoJkChannelListFiles(nicoIniPath, pluginDir, appDirectory, dataDirectory))
+                    ReadJkChannelListFile(mapFile, s, log);
+                log($"[Settings] NicoJK.ini 読み込み: {nicoIniPath}");
+                if (!string.IsNullOrWhiteSpace(s.LogDirectory)) log($"[Settings] logfileFolder={s.LogDirectory}");
+            }
         }
 
         if (string.IsNullOrWhiteSpace(s.LogDirectory))
-            s.LogDirectory = NormalizePath(Path.Combine(context.PluginDataDirectory, "NicoJK"), pluginDir);
+            s.LogDirectory = NormalizePath(Path.Combine(dataDirectory, "Plugins", PluginIdentity.Id, "NicoJK"), pluginDir);
 
         try
         {
@@ -68,13 +69,13 @@ internal sealed class PluginSettings
         catch (Exception ex)
         {
             s.LogDirectoryAvailable = false;
-            log($"[Settings] logfileFolder使用不可: path={s.LogDirectory} error={ex.GetType().Name}: {ex.Message} action=display_only");
+            log($"[Settings] コメント保存先を使用できません: path={s.LogDirectory} error={ex.GetType().Name}: {ex.Message}");
         }
 
-        foreach (var ch2 in FindCh2Files(ini, nicoIniPath, pluginDir, context, log))
+        foreach (var ch2 in FindCh2Files(ini, nicoIniPath, pluginDir, appDirectory, dataDirectory, log))
             s.Ch2Files.Add(ch2);
 
-        log($"[Settings] 完了 sourcePolicy=websocket_only pastLogMerge=disabled livePastLogCatchUp=disabled ch2Files={s.Ch2Files.Count} serviceMaps={s.ServiceChannelMapping.Count} save={(s.LogDirectoryAvailable ? "enabled" : "disabled")}");
+        log($"[Settings] 読み込み完了 ch2Files={s.Ch2Files.Count} serviceMaps={s.ServiceChannelMapping.Count} save={(s.LogDirectoryAvailable ? "enabled" : "disabled")}");
         return s;
     }
 
@@ -118,7 +119,7 @@ internal sealed class PluginSettings
         }
     }
 
-    private static IEnumerable<string> FindNicoJkChannelListFiles(string nicoIniPath, string pluginDir, IPluginContext context)
+    private static IEnumerable<string> FindNicoJkChannelListFiles(string nicoIniPath, string pluginDir, string appDirectory, string dataDirectory)
     {
         var dirs = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { pluginDir };
         if (!string.IsNullOrEmpty(nicoIniPath))
@@ -131,7 +132,7 @@ internal sealed class PluginSettings
                 if (!string.IsNullOrEmpty(tvtestRoot)) dirs.Add(tvtestRoot);
             }
         }
-        AddTvTestRootCandidates(dirs, pluginDir, context);
+        AddTvTestRootCandidates(dirs, pluginDir, appDirectory, dataDirectory);
         foreach (var dir in dirs.Where(Directory.Exists))
         {
             foreach (var name in new[] { "jkch.sh.txt", "jkch.txt" })
@@ -163,7 +164,7 @@ internal sealed class PluginSettings
         return int.TryParse(raw, out value);
     }
 
-    private static string ResolveNicoJkIniPath(IniDocument ini, IPluginContext context, string pluginDir, Action<string> log)
+    private static string ResolveNicoJkIniPath(IniDocument ini, string appDirectory, string dataDirectory, string pluginDir, Action<string> log)
     {
         var candidates = new List<string>();
         AddCandidate(candidates, NormalizePath(ini.Get("General", "NicoJkIniPath"), pluginDir));
@@ -174,7 +175,7 @@ internal sealed class PluginSettings
         var tvtest = NormalizePath(ini.Get("General", "TVTestPath"), pluginDir);
         if (File.Exists(tvtest)) AddCandidate(candidates, Path.Combine(Path.GetDirectoryName(tvtest)!, "Plugins", "NicoJK.ini"));
 
-        foreach (var root in BuildTvTestRootCandidates(pluginDir, context))
+        foreach (var root in BuildTvTestRootCandidates(pluginDir, appDirectory, dataDirectory))
             AddCandidate(candidates, Path.Combine(root, "Plugins", "NicoJK.ini"));
 
         foreach (var procName in new[] { "TVTest", "LIVETest" })
@@ -200,7 +201,7 @@ internal sealed class PluginSettings
         return string.Empty;
     }
 
-    private static IEnumerable<string> FindCh2Files(IniDocument ini, string nicoIniPath, string pluginDir, IPluginContext context, Action<string> log)
+    private static IEnumerable<string> FindCh2Files(IniDocument ini, string nicoIniPath, string pluginDir, string appDirectory, string dataDirectory, Action<string> log)
     {
         var dirs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var tvtest = NormalizePath(ini.Get("General", "TVTestPath"), pluginDir);
@@ -210,20 +211,24 @@ internal sealed class PluginSettings
             var tvtestRoot = Directory.GetParent(Path.GetDirectoryName(nicoIniPath) ?? string.Empty)?.FullName;
             if (!string.IsNullOrEmpty(tvtestRoot)) dirs.Add(tvtestRoot);
         }
-        AddTvTestRootCandidates(dirs, pluginDir, context);
+        AddTvTestRootCandidates(dirs, pluginDir, appDirectory, dataDirectory);
 
         foreach (var d in dirs.ToArray())
         {
             var tvini = Path.Combine(d, "TVTest.ini");
             if (!File.Exists(tvini)) continue;
-            var tv = IniDocument.Load(tvini);
+            if (!IniDocument.TryLoad(tvini, out var tv, out var tvIniError))
+            {
+                log($"[Settings] TVTest.iniを読み込めません: path={tvini} error={tvIniError!.GetType().Name}: {tvIniError.Message} 継続します");
+                continue;
+            }
             var driverDir = tv.Get("Settings", "DriverDirectory");
             if (!string.IsNullOrWhiteSpace(driverDir)) dirs.Add(NormalizePath(driverDir, d));
         }
 
         var files = dirs
             .Where(Directory.Exists)
-            .SelectMany(d => Directory.EnumerateFiles(d, "*.ch2", SearchOption.TopDirectoryOnly))
+            .SelectMany(d => EnumerateCh2Files(d, log))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
@@ -235,16 +240,29 @@ internal sealed class PluginSettings
         return files;
     }
 
-    private static void AddTvTestRootCandidates(HashSet<string> dirs, string pluginDir, IPluginContext context)
+    private static IReadOnlyList<string> EnumerateCh2Files(string directory, Action<string> log)
     {
-        foreach (var root in BuildTvTestRootCandidates(pluginDir, context))
+        try
+        {
+            return Directory.GetFiles(directory, "*.ch2", SearchOption.TopDirectoryOnly);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            log($"[Settings] チャンネル設定を確認できません: path={directory} error={ex.GetType().Name}: {ex.Message} 継続します");
+            return Array.Empty<string>();
+        }
+    }
+
+    private static void AddTvTestRootCandidates(HashSet<string> dirs, string pluginDir, string appDirectory, string dataDirectory)
+    {
+        foreach (var root in BuildTvTestRootCandidates(pluginDir, appDirectory, dataDirectory))
             dirs.Add(root);
     }
 
-    private static IEnumerable<string> BuildTvTestRootCandidates(string pluginDir, IPluginContext context)
+    private static IEnumerable<string> BuildTvTestRootCandidates(string pluginDir, string appDirectory, string dataDirectory)
     {
         var roots = new List<string>();
-        foreach (var baseDir in new[] { pluginDir, AppContext.BaseDirectory, context.AppDirectory, context.DataDirectory })
+        foreach (var baseDir in new[] { pluginDir, AppContext.BaseDirectory, appDirectory, dataDirectory })
         {
             if (string.IsNullOrWhiteSpace(baseDir)) continue;
             var current = Directory.Exists(baseDir) ? new DirectoryInfo(baseDir) : Directory.GetParent(baseDir);

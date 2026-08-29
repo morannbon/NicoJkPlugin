@@ -1,5 +1,4 @@
-using System.Globalization;
-using System.Net;
+﻿using System.Net;
 using System.Text;
 using System.Text.RegularExpressions;
 
@@ -7,15 +6,14 @@ namespace NicoJkPlugin;
 
 /// <summary>
 /// Single shared comment text pipeline for NicoJK/NX-Jikkyo.
-/// All inbound DTO creation, duplicate keys, save XML, and TvAIr publish boundaries must pass here.
-/// Do not add character-by-character one-off fixes elsewhere.
+/// The normalized Unicode string produced here is the canonical value used by
+/// duplicate detection, XML save, TimedTextStreams, and VideoOverlay.
+/// Do not add projection-specific character replacement or cleanup elsewhere.
 /// </summary>
 internal static class NicoJkCommentTextPipeline
 {
     private const int MaxDecodePasses = 10;
-    private const int MaxFinalDecodePasses = 4;
 
-    private static readonly Regex MultiSpace = new("[ ]{2,}", RegexOptions.Compiled | RegexOptions.CultureInvariant);
     private static readonly Regex EntityCandidate = new(@"&(?:amp;|#|#x|[a-zA-Z])", RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
     private static readonly Regex NumericEntity = new(@"&#(?<hex>x)?(?<value>[0-9a-fA-F]{1,8});?", RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
     private static readonly Regex BrokenAmpNumericEntity = new(@"&amp;(?=#(?:x[0-9a-fA-F]{1,8}|[0-9]{1,8});?)", RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
@@ -23,45 +21,41 @@ internal static class NicoJkCommentTextPipeline
     private static readonly Regex ResidualEncodedNumericEntity = new(@"&amp;#(?:x[0-9a-fA-F]{1,8}|[0-9]{1,8});?", RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
     private static readonly Regex ResidualNamedEntity = new(@"&(?:amp|lt|gt|quot|apos|nbsp|#39);", RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
 
-    private static readonly Dictionary<int, string> OverlaySafeScalarFallbacks = new()
-    {
-        // Frequently observed Nico/NX-Jikkyo emoji-like supplementary-plane comments.
-        // TvAIr/WebUI/OSD layers can re-escape supplementary scalars into literal NCRs.
-        // These fallbacks keep display readable without relying on individual route hacks.
-        [0x1F480] = "☠",       // skull
-        [0x1F631] = "‼",       // face screaming in fear
-        [0x1F4A2] = "‼",       // anger symbol
-        [0x1FAEA] = "困惑",    // distorted face
-        [0x1F602] = "笑",      // tears of joy
-        [0x1F923] = "笑",      // rolling on the floor laughing
-        [0x1F914] = "？",      // thinking face
-        [0x1F62D] = "泣",      // loudly crying face
-        [0x1F62E] = "驚",      // face with open mouth
-        [0x1F621] = "怒",      // enraged face
-        [0x1F44D] = "良",      // thumbs up
-        [0x1F44E] = "否",      // thumbs down
-        [0x1F525] = "炎",      // fire
-        [0x1F389] = "祝",      // party popper
-    };
-
     /// <summary>
-    /// Normalizes comment body text for all UI/publish/save paths.
-    /// It decodes HTML/NCR text, never enables HTML markup behavior.
+    /// Creates the canonical Unicode value shared by all comment projections.
+    /// Valid supplementary-plane scalars, ZWJ, variation selectors, and combining
+    /// characters are preserved. Only malformed surrogate code units and unwanted
+    /// control characters are removed.
     /// </summary>
-    public static string NormalizeForDisplay(string? value)
-        => NormalizeCore(value, stripControls: true, collapseSpaces: true, overlaySafe: true, finalDisplayBoundary: true);
+    public static string NormalizeForDisplay(string? value) => NormalizeCanonical(value);
 
-    public static string NormalizeForPublish(string? value)
-        => NormalizeForDisplay(value);
+    public static string NormalizeForPublish(string? value) => NormalizeCanonical(value);
 
-    public static string NormalizeForSave(string? value)
-        => NormalizeCore(value, stripControls: true, collapseSpaces: true, overlaySafe: false, finalDisplayBoundary: false);
+    public static string NormalizeForSave(string? value) => NormalizeCanonical(value);
 
-    public static string NormalizeForDuplicateKey(string? value)
-        => NormalizeCore(value, stripControls: true, collapseSpaces: true, overlaySafe: true, finalDisplayBoundary: true);
+    public static string NormalizeForDuplicateKey(string? value) => NormalizeCanonical(value);
 
-    public static string NormalizeXmlAttribute(string? value)
-        => NormalizeCore(value, stripControls: true, collapseSpaces: true, overlaySafe: false, finalDisplayBoundary: false);
+    public static string NormalizeXmlAttribute(string? value) => NormalizeCanonical(value);
+
+    public static string EscapeXmlText(string? value)
+    {
+        var canonical = NormalizeCanonical(value);
+        return canonical
+            .Replace("&", "&amp;", StringComparison.Ordinal)
+            .Replace("<", "&lt;", StringComparison.Ordinal)
+            .Replace(">", "&gt;", StringComparison.Ordinal);
+    }
+
+    public static string EscapeXmlAttribute(string? value)
+    {
+        var canonical = NormalizeCanonical(value);
+        return canonical
+            .Replace("&", "&amp;", StringComparison.Ordinal)
+            .Replace("<", "&lt;", StringComparison.Ordinal)
+            .Replace(">", "&gt;", StringComparison.Ordinal)
+            .Replace("\"", "&quot;", StringComparison.Ordinal)
+            .Replace("'", "&apos;", StringComparison.Ordinal);
+    }
 
     public static bool HasResidualNumericReference(string? value)
         => !string.IsNullOrEmpty(value) && (ResidualNumericEntity.IsMatch(value) || ResidualEncodedNumericEntity.IsMatch(value));
@@ -69,57 +63,47 @@ internal static class NicoJkCommentTextPipeline
     public static bool HasResidualHtmlReference(string? value)
         => !string.IsNullOrEmpty(value) && (HasResidualNumericReference(value) || ResidualNamedEntity.IsMatch(value));
 
-    private static string NormalizeCore(string? value, bool stripControls, bool collapseSpaces, bool overlaySafe, bool finalDisplayBoundary)
+    private static string NormalizeCanonical(string? value)
     {
         if (string.IsNullOrEmpty(value)) return string.Empty;
 
-        var decoded = CanonicalizeEntityText(value);
-        decoded = DecodeHtmlEntitiesRepeated(decoded, MaxDecodePasses);
-        decoded = DecodeNumericEntities(decoded);
-        decoded = DecodeResidualReferences(decoded, finalDisplayBoundary ? MaxDecodePasses : MaxFinalDecodePasses);
+        var decoded = DecodeHtmlEntitiesRepeated(value, MaxDecodePasses);
         if (decoded.Length == 0) return string.Empty;
 
-        if (overlaySafe) decoded = NormalizeSupplementaryScalarsForOverlay(decoded);
-
-        decoded = SanitizeCharacters(decoded, stripControls, collapseSpaces);
-
-        if (finalDisplayBoundary)
-        {
-            // One final shared boundary before OSD/WebUI publication. This is intentionally generic:
-            // it handles ASCII entities such as &#39; and encoded NCRs such as &amp;#128128;
-            // without adding per-character route fixes.
-            decoded = DecodeResidualReferences(decoded, MaxFinalDecodePasses);
-            if (overlaySafe) decoded = NormalizeSupplementaryScalarsForOverlay(decoded);
-            decoded = SanitizeCharacters(decoded, stripControls, collapseSpaces);
-        }
-
-        return decoded;
+        return SanitizeUnicode(decoded);
     }
 
-    private static string SanitizeCharacters(string value, bool stripControls, bool collapseSpaces)
+    private static string SanitizeUnicode(string value)
     {
         var sb = new StringBuilder(value.Length);
-        foreach (var ch in value)
+
+        for (var i = 0; i < value.Length; i++)
         {
-            if (ch == '\r' || ch == '\n' || ch == '\t')
+            var ch = value[i];
+
+            if (char.IsHighSurrogate(ch))
             {
-                sb.Append(' ');
+                if (i + 1 < value.Length && char.IsLowSurrogate(value[i + 1]))
+                {
+                    sb.Append(ch);
+                    sb.Append(value[++i]);
+                }
+                // An isolated high surrogate is malformed input and is discarded.
                 continue;
             }
 
-            if (ch == '\u00A0' || ch == '\u3000')
-            {
-                sb.Append(' ');
-                continue;
-            }
+            // An isolated low surrogate is malformed input and is discarded.
+            if (char.IsLowSurrogate(ch)) continue;
 
-            if (stripControls && char.IsControl(ch)) continue;
-            if (char.GetUnicodeCategory(ch) is UnicodeCategory.Format) continue;
+            // Preserve all valid Unicode characters, including ZWJ, variation selectors,
+            // combining characters, supplementary-plane scalars, and original spacing.
+            // Remove only control code units that do not belong in comment text.
+            if (char.IsControl(ch)) continue;
+
             sb.Append(ch);
         }
 
-        var result = sb.ToString().Normalize(NormalizationForm.FormC);
-        return collapseSpaces ? MultiSpace.Replace(result, " ").Trim() : result.Trim();
+        return sb.ToString();
     }
 
     private static string DecodeHtmlEntitiesRepeated(string value, int maxPasses)
@@ -127,30 +111,13 @@ internal static class NicoJkCommentTextPipeline
         var current = value;
         for (var i = 0; i < maxPasses; i++)
         {
-            current = CanonicalizeEntityText(current);
             if (!EntityCandidate.IsMatch(current) && !HasResidualHtmlReference(current)) break;
 
-            var ampFixed = BrokenAmpNumericEntity.Replace(current, "&");
-            var webDecoded = WebUtility.HtmlDecode(ampFixed) ?? string.Empty;
-            var numericDecoded = DecodeNumericEntities(webDecoded);
-
-            if (string.Equals(numericDecoded, current, StringComparison.Ordinal)) break;
-            current = numericDecoded;
-        }
-        return current;
-    }
-
-    private static string DecodeResidualReferences(string value, int maxPasses)
-    {
-        var current = value;
-        for (var i = 0; i < maxPasses; i++)
-        {
             var before = current;
-            current = CanonicalizeEntityText(current);
             current = BrokenAmpNumericEntity.Replace(current, "&");
             current = WebUtility.HtmlDecode(current) ?? string.Empty;
             current = DecodeNumericEntities(current);
-            if (!HasResidualHtmlReference(current)) break;
+
             if (string.Equals(current, before, StringComparison.Ordinal)) break;
         }
         return current;
@@ -173,58 +140,6 @@ internal static class NicoJkCommentTextPipeline
                 return string.Empty;
             }
         });
-    }
-
-    private static string NormalizeSupplementaryScalarsForOverlay(string value)
-    {
-        var sb = new StringBuilder(value.Length);
-        for (var i = 0; i < value.Length; i++)
-        {
-            var ch = value[i];
-            if (char.IsHighSurrogate(ch) && i + 1 < value.Length && char.IsLowSurrogate(value[i + 1]))
-            {
-                var scalar = char.ConvertToUtf32(ch, value[i + 1]);
-                if (OverlaySafeScalarFallbacks.TryGetValue(scalar, out var fallback))
-                {
-                    sb.Append(fallback);
-                }
-                else
-                {
-                    // Do not let unsupported supplementary-plane characters be re-escaped as literal NCRs in OSD.
-                    // Keep a compact neutral marker instead of leaking "&#xxxxx;" to the viewer.
-                    sb.Append('□');
-                }
-                i++;
-                continue;
-            }
-
-            if (char.IsSurrogate(ch)) continue;
-            sb.Append(ch);
-        }
-        return sb.ToString();
-    }
-
-    private static string CanonicalizeEntityText(string value)
-    {
-        if (string.IsNullOrEmpty(value)) return string.Empty;
-
-        var sb = new StringBuilder(value.Length);
-        foreach (var ch in value.Normalize(NormalizationForm.FormKC))
-        {
-            // Entity-like text can arrive through JSON/XML/HTML layers with mixed-width characters
-            // or invisible format marks. Normalize only the text stream; HTML execution remains disabled.
-            if (char.GetUnicodeCategory(ch) is UnicodeCategory.Format) continue;
-            sb.Append(ch switch
-            {
-                '＆' => '&',
-                '＃' => '#',
-                '；' => ';',
-                'ｘ' => 'x',
-                'Ｘ' => 'X',
-                _ => ch
-            });
-        }
-        return sb.ToString();
     }
 
     private static bool IsValidUnicodeScalar(int codePoint)

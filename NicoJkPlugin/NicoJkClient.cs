@@ -1,14 +1,23 @@
-using System.Net.WebSockets;
+﻿using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
 namespace NicoJkPlugin;
 
+internal enum NicoJkClientStatus
+{
+    Connecting,
+    Receiving,
+    Unsupported,
+    ConnectionError
+}
+
 internal sealed class NicoJkClient : IAsyncDisposable
 {
     private const string NxJikkyoHost = "nx-jikkyo.tsukumijima.net";
     private const int WatchInfoTimeoutSeconds = 15;
+    private const int WebSocketConnectTimeoutSeconds = 10;
     private const int MaxWebSocketMessageBytes = 1024 * 1024;
     private static readonly TimeSpan BaseReconnectDelay = TimeSpan.FromSeconds(15);
 
@@ -17,27 +26,33 @@ internal sealed class NicoJkClient : IAsyncDisposable
     private readonly int _backlog;
     private readonly bool _dropForwarded;
     private readonly Action<string> _log;
+    private readonly Action _statusChanged;
     private readonly Random _jitter = new();
     private CancellationTokenSource? _cts;
     private Task? _task;
     private bool _pastBlock;
+    private int _status = (int)NicoJkClientStatus.Connecting;
 
     public event Action<NicoJkComment, bool>? CommentReceived;
 
-    public NicoJkClient(int jk, string watchTemplate, int backlog, bool dropForwarded, Action<string> log)
+    public NicoJkClientStatus Status => (NicoJkClientStatus)Volatile.Read(ref _status);
+
+    public NicoJkClient(int jk, string watchTemplate, int backlog, bool dropForwarded, Action<string> log, Action statusChanged)
     {
         _jk = jk;
         _watchTemplate = watchTemplate;
         _backlog = Math.Clamp(backlog, 0, 1000);
         _dropForwarded = dropForwarded;
         _log = log;
+        _statusChanged = statusChanged;
     }
 
     public void Start()
     {
         if (_cts is not null) return;
         _cts = new CancellationTokenSource();
-        _log($"[NicoJkClient] jk{_jk} 起動 sourcePolicy=websocket_only backlog={_backlog}");
+        SetStatus(NicoJkClientStatus.Connecting);
+        _log($"[NicoJkClient] jk{_jk} 接続開始 backlog={_backlog}");
         _task = Task.Run(() => Loop(_cts.Token));
     }
 
@@ -72,8 +87,14 @@ internal sealed class NicoJkClient : IAsyncDisposable
                 await ReceiveComments(commentUrl, threadId, ct).ConfigureAwait(false);
             }
             catch (OperationCanceledException) { break; }
+            catch (UnsupportedChannelException)
+            {
+                SetStatus(NicoJkClientStatus.Unsupported);
+                break;
+            }
             catch (Exception ex)
             {
+                SetStatus(NicoJkClientStatus.ConnectionError);
                 var delay = NextReconnectDelay();
                 _log($"[NicoJkClient] jk{_jk} error={ex.GetType().Name}: {ex.Message} retrySec={(int)delay.TotalSeconds}");
                 try { await Task.Delay(delay, ct).ConfigureAwait(false); }
@@ -91,12 +112,15 @@ internal sealed class NicoJkClient : IAsyncDisposable
 
         try
         {
-            using var connectTimeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            connectTimeout.CancelAfter(TimeSpan.FromSeconds(10));
-            await ws.ConnectAsync(new Uri(watchUrl), connectTimeout.Token).ConfigureAwait(false);
+            await ConnectWebSocket(ws, new Uri(watchUrl), ct).ConfigureAwait(false);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (ex is not OperationCanceledException and not TimeoutException)
         {
+            // NX-Jikkyo が 403 / 404 を返したチャンネルは実況対象外として扱う。
+            // 通常の通信障害へ落とさず、直接接続・再試行・接続エラー表示を行わない。
+            if (IsUnsupportedChannelResponse(ex))
+                throw new UnsupportedChannelException();
+
             _log($"[NicoJkClient] jk{_jk} /ws/watch 接続失敗: {ex.GetType().Name}: {ex.Message}");
             return null;
         }
@@ -142,6 +166,24 @@ internal sealed class NicoJkClient : IAsyncDisposable
         return null;
     }
 
+
+    private static bool IsUnsupportedChannelResponse(Exception exception)
+    {
+        for (Exception? current = exception; current is not null; current = current.InnerException)
+        {
+            var message = current.Message;
+            if (message.Contains("status code '403'", StringComparison.OrdinalIgnoreCase)
+                || message.Contains("status code 403", StringComparison.OrdinalIgnoreCase)
+                || message.Contains("status code '404'", StringComparison.OrdinalIgnoreCase)
+                || message.Contains("status code 404", StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+
+        return false;
+    }
+
+    private sealed class UnsupportedChannelException : Exception { }
+
     private async Task ReceiveComments(string url, string? threadId, CancellationToken ct)
     {
         if (!IsTrustedCommentWebSocket(url))
@@ -153,9 +195,7 @@ internal sealed class NicoJkClient : IAsyncDisposable
         _log($"[NicoJkClient] jk{_jk} /ws/comment 接続開始 url={url}");
         using var ws = CreateWebSocket();
 
-        using var connectTimeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        connectTimeout.CancelAfter(TimeSpan.FromSeconds(10));
-        await ws.ConnectAsync(new Uri(url), connectTimeout.Token).ConfigureAwait(false);
+        await ConnectWebSocket(ws, new Uri(url), ct).ConfigureAwait(false);
 
         var actualThread = string.IsNullOrWhiteSpace(threadId) ? _jk.ToString() : threadId;
         var cmd = JsonSerializer.Serialize(new object[]
@@ -167,6 +207,7 @@ internal sealed class NicoJkClient : IAsyncDisposable
             new { ping = new { content = "rf:0" } }
         });
         await Send(ws, cmd, ct).ConfigureAwait(false);
+        SetStatus(NicoJkClientStatus.Receiving);
         _log($"[NicoJkClient] jk{_jk} comment接続 thread={actualThread}");
 
         var count = 0;
@@ -182,6 +223,28 @@ internal sealed class NicoJkClient : IAsyncDisposable
             }
         }
         _log($"[NicoJkClient] jk{_jk} comment終了 count={count}");
+    }
+
+    private static async Task ConnectWebSocket(ClientWebSocket ws, Uri uri, CancellationToken sessionToken)
+    {
+        using var connectTimeout = CancellationTokenSource.CreateLinkedTokenSource(sessionToken);
+        connectTimeout.CancelAfter(TimeSpan.FromSeconds(WebSocketConnectTimeoutSeconds));
+
+        try
+        {
+            await ws.ConnectAsync(uri, connectTimeout.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException ex) when (!sessionToken.IsCancellationRequested)
+        {
+            throw new TimeoutException($"WebSocket connect timed out after {WebSocketConnectTimeoutSeconds} seconds.", ex);
+        }
+    }
+
+    private void SetStatus(NicoJkClientStatus status)
+    {
+        var previous = Interlocked.Exchange(ref _status, (int)status);
+        if (previous == (int)status) return;
+        try { _statusChanged(); } catch { }
     }
 
     private bool ProcessMessage(string payload)

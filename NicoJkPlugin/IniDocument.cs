@@ -11,25 +11,37 @@ internal sealed class IniDocument
         TryRegisterCodePagesProvider();
     }
 
-    public static IniDocument Load(string path)
+    public static bool TryLoad(string path, out IniDocument ini, out Exception? error)
     {
-        var ini = new IniDocument();
-        if (!File.Exists(path)) return ini;
-        ini.Parse(ReadAllLinesSmart(path));
-        return ini;
+        ini = new IniDocument();
+        error = null;
+        if (!File.Exists(path)) return true;
+        try
+        {
+            ini.Parse(ReadAllLinesSmart(path));
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            error = ex;
+            ini = new IniDocument();
+            return false;
+        }
     }
 
     public static IReadOnlyList<string> ReadAllLinesSmart(string path)
     {
         if (!File.Exists(path)) return Array.Empty<string>();
-        var bytes = File.ReadAllBytes(path);
+        var bytes = ReadAllBytesShared(path);
         return ReadTextSmart(bytes).Replace("\r\n", "\n").Replace('\r', '\n').Split('\n');
     }
 
-    public static string ReadTextSmart(string path)
+    private static byte[] ReadAllBytesShared(string path)
     {
-        if (!File.Exists(path)) return string.Empty;
-        return ReadTextSmart(File.ReadAllBytes(path));
+        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+        using var buffer = new MemoryStream();
+        stream.CopyTo(buffer);
+        return buffer.ToArray();
     }
 
     private static string ReadTextSmart(byte[] bytes)
@@ -74,14 +86,6 @@ internal sealed class IniDocument
         {
             // System.Text.Encoding.CodePages が利用できない環境ではUTF-8/既定Encodingだけで継続する。
         }
-    }
-
-    public static IniDocument ParseText(string? text)
-    {
-        var ini = new IniDocument();
-        if (string.IsNullOrWhiteSpace(text)) return ini;
-        ini.Parse(text.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n'));
-        return ini;
     }
 
     private void Parse(IEnumerable<string> lines)

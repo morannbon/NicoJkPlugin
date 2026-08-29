@@ -1,15 +1,14 @@
-using System.Text;
+﻿using System.Text;
 using System.Text.RegularExpressions;
-using TvAIrPlugin;
 
 namespace NicoJkPlugin;
 
 internal sealed class RecordingSession : IAsyncDisposable
 {
-    private readonly PluginRecordingInfo _info;
+    private readonly RecordingInfo _info;
     private readonly int _jk;
     private readonly PluginSettings _settings;
-    private readonly Action<LiveCommentEvent> _publish;
+    private readonly Action<CommentPublish> _publish;
     private readonly Action<string> _log;
     private readonly NicoJkClient _client;
     private readonly HashSet<string> _seen = new(StringComparer.Ordinal);
@@ -24,22 +23,24 @@ internal sealed class RecordingSession : IAsyncDisposable
     private int _skippedPast;
     private int _skippedOld;
 
-    public RecordingSession(PluginRecordingInfo info, int jk, PluginSettings settings, Action<LiveCommentEvent> publish, Action<string> log)
+    public RecordingSession(RecordingInfo info, int jk, PluginSettings settings, Action<CommentPublish> publish, Action<string> log, Action statusChanged)
     {
         _info = info;
         _jk = jk;
         _settings = settings;
         _publish = publish;
         _log = log;
-        _client = new NicoJkClient(jk, settings.RefugeUri, settings.BacklogCount, settings.DropForwardedComment, log);
+        _client = new NicoJkClient(jk, settings.RefugeUri, settings.BacklogCount, settings.DropForwardedComment, log, statusChanged);
         _client.CommentReceived += OnComment;
     }
+
+    public NicoJkClientStatus Status => _client.Status;
 
     public void Start()
     {
         PrepareStorage();
         _client.Start();
-        _log($"[Session] 開始: R{_info.ReservationId} service={_info.ServiceName} jk{_jk} sourcePolicy=websocket_only pastLogMerge=disabled backlog={_settings.BacklogCount} save={(_saveEnabled ? "enabled" : "disabled")}");
+        _log($"[Session] 開始: {_info.ReservationId} service={_info.ServiceName} jk{_jk} backlog={_settings.BacklogCount} save={(_saveEnabled ? "enabled" : "disabled")}");
     }
 
     private void PrepareStorage()
@@ -60,15 +61,15 @@ internal sealed class RecordingSession : IAsyncDisposable
         {
             _saveEnabled = false;
             _sessionDirectory = null;
-            _log($"[Session] コメント保存無効: R{_info.ReservationId} jk{_jk} path={_settings.LogDirectory} error={ex.GetType().Name}: {ex.Message} action=display_only");
+            _log($"[Session] コメント保存無効: {_info.ReservationId} jk{_jk} path={_settings.LogDirectory} error={ex.GetType().Name}: {ex.Message} action=display_only");
         }
     }
 
-    public async Task StopAsync(PluginRecordingInfo? stopInfo = null)
+    public async Task StopAsync()
     {
         await _client.StopAsync().ConfigureAwait(false);
         FinalizeFile();
-        _log($"[Session] 終了: R{_info.ReservationId} jk{_jk} received={_received} displayed={_displayed} saved={_saved} skippedPast={_skippedPast} skippedOld={_skippedOld} finalSaved={CountLines(_filePath)} file={_filePath ?? "(no-comment)"}");
+        _log($"[Session] 終了: {_info.ReservationId} jk{_jk} received={_received} displayed={_displayed} saved={_saved} skippedPast={_skippedPast} skippedOld={_skippedOld} finalSaved={CountLines(_filePath)} file={_filePath ?? "(no-comment)"}");
     }
 
     public async ValueTask DisposeAsync() => await StopAsync().ConfigureAwait(false);
@@ -96,12 +97,15 @@ internal sealed class RecordingSession : IAsyncDisposable
     {
         try
         {
-            _publish(new LiveCommentEvent
+            _publish(new CommentPublish
             {
                 PluginId = PluginIdentity.Id,
                 ReservationId = _info.ReservationId.ToString(),
                 ServiceName = _info.ServiceName,
                 ProgramTitle = _info.Title,
+                NetworkId = _info.NetworkId,
+                TransportStreamId = _info.TransportStreamId,
+                ServiceId = _info.ServiceId,
                 JkChannel = _jk,
                 UnixTime = c.Date,
                 Vpos = c.Vpos is >= int.MinValue and <= int.MaxValue ? (int)c.Vpos : null,
@@ -134,7 +138,7 @@ internal sealed class RecordingSession : IAsyncDisposable
                 if (!_saveErrorLogged)
                 {
                     _saveErrorLogged = true;
-                    _log($"[Session] コメント保存停止: R{_info.ReservationId} jk{_jk} error={ex.GetType().Name}: {ex.Message} action=display_continue");
+                    _log($"[Session] コメント保存停止: {_info.ReservationId} jk{_jk} error={ex.GetType().Name}: {ex.Message} action=display_continue");
                 }
             }
         }

@@ -1,26 +1,25 @@
-NicoJkPlugin 1.0.1
+﻿NicoJkPlugin 1.0.3
 
 概要
-TvAIr上で録画中の番組に対応するニコニコ実況コメントを取得し、TvAIrのライブコメント表示および録画後再生用コメント保存に連携するTvAIr用プラグインです。
+TvAIrで録画中の番組に対応するNicoJKコメントを取得し、コメント保存、時系列テキスト配信、視聴画面へのコメント表示を行うプラグインです。
 
-インストール
-1. TvAIr を終了します。
-2. TvAIr のプラグインフォルダに NicoJK 用フォルダを作成します。
-3. 以下の2ファイルを配置します。
+インストール方法
+1. Visual Studio 2022で NicoJkPlugin.sln を開きます。
+2. 使用するTvAIrのアーキテクチャに合わせ、Release / x64 または Release / x86 でビルドします。
+3. 生成された NicoJkPlugin.dll と plugin.json をTvAIrのプラグイン配置先へコピーします。
 
-   NicoJkPlugin.dll
-   plugin.json
+設定
+既存のNicoJK設定を自動的に読み込みます。通常は追加設定不要です。
 
-4. TvAIr を起動します。
-
-ビルド
-Visual Studio 2022で NicoJkPlugin.sln を開き、Release構成でビルドします。
-
-動作環境
-TvAIr 1.0.8以降
+状態表示
+NicoJK画面では、現在の状態を「正常」「実況受信中」「実況対象外」「接続できません」で確認できます。
 
 バージョン
-1.0.1
+1.0.3
+
+動作条件
+TvAIr Plugin SDK 1.1.5
+.NET 8 Windows
 
 ライセンス
-LICENSE を参照してください。
+利用する外部サービス、ライブラリ、データの利用条件に従ってください。
