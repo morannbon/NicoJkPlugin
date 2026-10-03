@@ -1,0 +1,47 @@
+name: NicoJkPlugin Build Test
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-2022
+
+    strategy:
+      matrix:
+        platform:
+          - x64
+          - x86
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Build NicoJkPlugin
+        run: msbuild NicoJkPlugin.sln /restore /m /p:Configuration=Release /p:Platform=${{ matrix.platform }}
+
+      - name: Prepare user package
+        shell: pwsh
+        run: |
+          $source = "NicoJkPlugin\bin\${{ matrix.platform }}\Release\net8.0-windows"
+          $out = "package\${{ matrix.platform }}"
+
+          New-Item -ItemType Directory -Force -Path $out | Out-Null
+          Copy-Item "$source\*" $out -Recurse -Force
+
+          Copy-Item "README.md" $out
+          Copy-Item "README.txt" $out
+          Copy-Item "LICENSE" $out
+
+          Get-ChildItem $out -Recurse -Include *.pdb,*.lib,*.exp |
+            Remove-Item -Force
+
+      - name: Upload user package
+        uses: actions/upload-artifact@v4
+        with:
+          name: NicoJkPlugin-${{ matrix.platform }}-ready
+          path: package/${{ matrix.platform }}/
+          if-no-files-found: error
