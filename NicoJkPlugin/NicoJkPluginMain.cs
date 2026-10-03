@@ -35,7 +35,8 @@ public sealed class NicoJkRuntimePlugin : ITvAirRuntimeCapabilityPlugin, ITvAirR
             PluginPermission.UseSafeEvent,
             PluginPermission.WriteLogs,
             PluginPermission.ReadViewerSessions,
-            PluginPermission.WriteVideoOverlay
+            PluginPermission.WriteVideoOverlay,
+            PluginPermission.UseInternetAccess
         },
         Windows = new[]
         {
@@ -122,6 +123,9 @@ public sealed class NicoJkRuntimePlugin : ITvAirRuntimeCapabilityPlugin, ITvAirR
             EventSubscriptions.Add(context.Events.Subscribe(
                 new TvAIrPlugin.Events.PluginEventSubscriptionRequest { EventType = TvAirEventType.RuntimeWindowLifecycleChanged.ToString() },
                 HandleRuntimeWindowLifecycleChanged));
+            EventSubscriptions.Add(context.Events.Subscribe(
+                new TvAIrPlugin.Events.PluginEventSubscriptionRequest { EventType = TvAirEventType.PluginPermissionChanged.ToString() },
+                _ => NotifyInternetAccessChanged()));
             ReconcileRecordingSessions();
         }
         Log($"[NicoJkPlugin] 起動完了 v{PluginIdentity.Version}");
@@ -242,7 +246,7 @@ public sealed class NicoJkRuntimePlugin : ITvAirRuntimeCapabilityPlugin, ITvAirR
             ActualStartTime = reservation.Start,
             ActualEndTime = reservation.ScheduledEnd
         };
-        var session = new RecordingSession(info, jk.Value, _settings, _publisher.Publish, Log, PublishDisplayStatus);
+        var session = new RecordingSession(info, jk.Value, _settings, _context!.InternetAccess, _publisher.Publish, Log, PublishDisplayStatus);
         lock (Sync)
         {
             if (Sessions.ContainsKey(reservation.ReservationId)) return;
@@ -250,6 +254,20 @@ public sealed class NicoJkRuntimePlugin : ITvAirRuntimeCapabilityPlugin, ITvAirR
         }
         Log($"[SessionManager] 録画開始 reservation={reservation.ReservationId} service={reservation.ServiceName} jk{jk.Value}");
         session.Start();
+        PublishDisplayStatus();
+    }
+
+
+    private static void NotifyInternetAccessChanged()
+    {
+        List<RecordingSession> sessions;
+        lock (Sync) sessions = Sessions.Values.ToList();
+
+        foreach (var session in sessions)
+        {
+            try { session.NotifyInternetAccessChanged(); }
+            catch (Exception ex) { Log($"[Network] permission change notify failed: {ex.GetType().Name}: {ex.Message}"); }
+        }
         PublishDisplayStatus();
     }
 

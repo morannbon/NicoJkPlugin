@@ -1,11 +1,11 @@
 ﻿<Project>
   <PropertyGroup>
-    <TvAIrProductVersion>1.2.0</TvAIrProductVersion>
-    <TvAIrFileVersion>1.2.0.0</TvAIrFileVersion>
-    <TvAIrAssemblyVersion>1.2.0.0</TvAIrAssemblyVersion>
-    <TvAIrPluginSdkVersion>1.1.5</TvAIrPluginSdkVersion>
+    <TvAIrProductVersion>1.2.2</TvAIrProductVersion>
+    <TvAIrFileVersion>1.2.2.0</TvAIrFileVersion>
+    <TvAIrAssemblyVersion>1.2.2.0</TvAIrAssemblyVersion>
+    <TvAIrPluginSdkVersion>1.1.8</TvAIrPluginSdkVersion>
     <TvAIrPluginSdkAssemblyVersion>1.0.0.0</TvAIrPluginSdkAssemblyVersion>
-    <TvAIrPluginHostContractVersion>1.1.5</TvAIrPluginHostContractVersion>
+    <TvAIrPluginHostContractVersion>1.1.8</TvAIrPluginHostContractVersion>
     <TvAIrPublicContractName>release_contract</TvAIrPublicContractName>
     <TvAIrPluginHostContractName>plugin-host-foundation</TvAIrPluginHostContractName>
     <TvAIrPluginCompatibilityMajor>1</TvAIrPluginCompatibilityMajor>

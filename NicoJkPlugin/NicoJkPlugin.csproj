@@ -8,11 +8,18 @@
     <OutputType>Library</OutputType>
     <RootNamespace>NicoJkPlugin</RootNamespace>
     <AssemblyName>NicoJkPlugin</AssemblyName>
-    <Version>1.0.3</Version>
-    <FileVersion>1.0.3.0</FileVersion>
-    <AssemblyVersion>1.0.3.0</AssemblyVersion>
-    <InformationalVersion>1.0.3</InformationalVersion>
+    <Version>1.0.4</Version>
+    <FileVersion>1.0.4.0</FileVersion>
+    <AssemblyVersion>1.0.4.0</AssemblyVersion>
+    <InformationalVersion>1.0.4</InformationalVersion>
 
+    <!--
+      Developer Diagnostics canonical build boundary.
+      Public release source keeps this disabled. Development builds may
+      explicitly set TvAIrPluginDeveloperDiagnostics=true when diagnostics are needed.
+    -->
+    <TvAIrPluginDeveloperDiagnostics Condition="'$(TvAIrPluginDeveloperDiagnostics)' == ''">false</TvAIrPluginDeveloperDiagnostics>
+    <DefineConstants Condition="'$(TvAIrPluginDeveloperDiagnostics)' == 'true'">$(DefineConstants);TVAIR_PLUGIN_DEVELOPER_DIAGNOSTICS</DefineConstants>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Platform)'=='x86'">

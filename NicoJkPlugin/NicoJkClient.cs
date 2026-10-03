@@ -2,6 +2,7 @@
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using TvAIrPlugin;
 
 namespace NicoJkPlugin;
 
@@ -27,6 +28,8 @@ internal sealed class NicoJkClient : IAsyncDisposable
     private readonly bool _dropForwarded;
     private readonly Action<string> _log;
     private readonly Action _statusChanged;
+    private readonly ITvAirInternetAccessApi _internetAccess;
+    private TaskCompletionSource<bool> _internetAccessChanged = CreateInternetAccessChangedSignal();
     private readonly Random _jitter = new();
     private CancellationTokenSource? _cts;
     private Task? _task;
@@ -37,12 +40,13 @@ internal sealed class NicoJkClient : IAsyncDisposable
 
     public NicoJkClientStatus Status => (NicoJkClientStatus)Volatile.Read(ref _status);
 
-    public NicoJkClient(int jk, string watchTemplate, int backlog, bool dropForwarded, Action<string> log, Action statusChanged)
+    public NicoJkClient(int jk, string watchTemplate, int backlog, bool dropForwarded, ITvAirInternetAccessApi internetAccess, Action<string> log, Action statusChanged)
     {
         _jk = jk;
         _watchTemplate = watchTemplate;
         _backlog = Math.Clamp(backlog, 0, 1000);
         _dropForwarded = dropForwarded;
+        _internetAccess = internetAccess;
         _log = log;
         _statusChanged = statusChanged;
     }
@@ -52,8 +56,19 @@ internal sealed class NicoJkClient : IAsyncDisposable
         if (_cts is not null) return;
         _cts = new CancellationTokenSource();
         SetStatus(NicoJkClientStatus.Connecting);
-        _log($"[NicoJkClient] jk{_jk} 接続開始 backlog={_backlog}");
+        _log(IsInternetAccessEffective()
+            ? $"[NicoJkClient] jk{_jk} 接続開始 backlog={_backlog}"
+            : $"[NicoJkClient] jk{_jk} ネットワーク利用OFFのため接続待機 backlog={_backlog}");
         _task = Task.Run(() => Loop(_cts.Token));
+    }
+
+    public void NotifyInternetAccessChanged()
+    {
+        // 通知理由は判定に使わない。状態変化をwakeの契機にするだけで、
+        // 接続可否の正本は常に InternetAccess.GetState().Effective とする。
+        var next = CreateInternetAccessChangedSignal();
+        var previous = Interlocked.Exchange(ref _internetAccessChanged, next);
+        previous.TrySetResult(true);
     }
 
     public async Task StopAsync()
@@ -73,20 +88,49 @@ internal sealed class NicoJkClient : IAsyncDisposable
 
     public async ValueTask DisposeAsync() => await StopAsync().ConfigureAwait(false);
 
-    private async Task Loop(CancellationToken ct)
+    private async Task Loop(CancellationToken sessionToken)
     {
-        while (!ct.IsCancellationRequested)
+        while (!sessionToken.IsCancellationRequested)
         {
+            if (!IsInternetAccessEffective())
+            {
+                SetStatus(NicoJkClientStatus.Connecting);
+                try
+                {
+                    await WaitForInternetAccessAsync(sessionToken).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
+                continue;
+            }
+
+            using var networkCts = _internetAccess.CreateLinkedCancellation(sessionToken);
+            var networkToken = networkCts.Token;
+
             try
             {
-                var watch = await GetWatchInfo(ct).ConfigureAwait(false);
+                networkToken.ThrowIfCancellationRequested();
+                if (!IsInternetAccessEffective()) continue;
+
+                var watch = await GetWatchInfo(networkToken).ConfigureAwait(false);
+                if (!IsInternetAccessEffective()) continue;
+
                 var commentUrl = watch?.CommentUrl ?? DefaultCommentUrl();
                 var threadId = watch?.ThreadId;
                 if (watch is null)
                     _log($"[NicoJkClient] jk{_jk} room取得失敗 → comment直接接続 fallbackThread={_jk}");
-                await ReceiveComments(commentUrl, threadId, ct).ConfigureAwait(false);
+                await ReceiveComments(commentUrl, threadId, networkToken).ConfigureAwait(false);
             }
-            catch (OperationCanceledException) { break; }
+            catch (OperationCanceledException) when (!sessionToken.IsCancellationRequested)
+            {
+                SetStatus(NicoJkClientStatus.Connecting);
+            }
+            catch (OperationCanceledException)
+            {
+                break;
+            }
             catch (UnsupportedChannelException)
             {
                 SetStatus(NicoJkClientStatus.Unsupported);
@@ -97,15 +141,49 @@ internal sealed class NicoJkClient : IAsyncDisposable
                 SetStatus(NicoJkClientStatus.ConnectionError);
                 var delay = NextReconnectDelay();
                 _log($"[NicoJkClient] jk{_jk} error={ex.GetType().Name}: {ex.Message} retrySec={(int)delay.TotalSeconds}");
-                try { await Task.Delay(delay, ct).ConfigureAwait(false); }
-                catch (OperationCanceledException) { break; }
+                try { await Task.Delay(delay, networkToken).ConfigureAwait(false); }
+                catch (OperationCanceledException) when (!sessionToken.IsCancellationRequested)
+                {
+                    SetStatus(NicoJkClientStatus.Connecting);
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
             }
         }
         _log($"[NicoJkClient] jk{_jk} 終了");
     }
 
+    private bool IsInternetAccessEffective()
+    {
+        try { return _internetAccess.GetState().Effective; }
+        catch { return false; }
+    }
+
+    private async Task WaitForInternetAccessAsync(CancellationToken ct)
+    {
+        while (!ct.IsCancellationRequested)
+        {
+            if (IsInternetAccessEffective()) return;
+
+            // signal取得とEffective再評価を分け、通知直前/直後の競合でも
+            // ONへの状態変化を取りこぼさない。
+            var signal = Volatile.Read(ref _internetAccessChanged);
+            if (IsInternetAccessEffective()) return;
+
+            await signal.Task.WaitAsync(ct).ConfigureAwait(false);
+        }
+    }
+
+    private static TaskCompletionSource<bool> CreateInternetAccessChangedSignal()
+        => new(TaskCreationOptions.RunContinuationsAsynchronously);
+
     private async Task<WatchInfo?> GetWatchInfo(CancellationToken ct)
     {
+        ct.ThrowIfCancellationRequested();
+        if (!IsInternetAccessEffective()) return null;
+
         var watchUrl = WatchUrl();
         _log($"[NicoJkClient] jk{_jk} /ws/watch 接続開始 url={watchUrl}");
         using var ws = CreateWebSocket();
@@ -148,15 +226,15 @@ internal sealed class NicoJkClient : IAsyncDisposable
                 if (TryParseRoom(text, out var url, out var thread))
                 {
                     _log($"[NicoJkClient] jk{_jk} room取得 thread={thread} url={url}");
-                    TryClose(ws);
+                    TryClose(ws, ct);
                     return new WatchInfo(url, thread);
                 }
             }
         }
         catch (OperationCanceledException)
         {
-            if (!ct.IsCancellationRequested)
-                _log($"[NicoJkClient] jk{_jk} /ws/watch タイムアウト sec={WatchInfoTimeoutSeconds}");
+            if (ct.IsCancellationRequested) throw;
+            _log($"[NicoJkClient] jk{_jk} /ws/watch タイムアウト sec={WatchInfoTimeoutSeconds}");
         }
         catch (Exception ex)
         {
@@ -186,6 +264,9 @@ internal sealed class NicoJkClient : IAsyncDisposable
 
     private async Task ReceiveComments(string url, string? threadId, CancellationToken ct)
     {
+        ct.ThrowIfCancellationRequested();
+        if (!IsInternetAccessEffective()) return;
+
         if (!IsTrustedCommentWebSocket(url))
         {
             _log($"[NicoJkClient] jk{_jk} comment接続中止: untrustedUrl={url}");
@@ -484,12 +565,12 @@ internal sealed class NicoJkClient : IAsyncDisposable
         return Encoding.UTF8.GetString(ms.ToArray());
     }
 
-    private static void TryClose(ClientWebSocket ws)
+    private static void TryClose(ClientWebSocket ws, CancellationToken ct)
     {
         try
         {
             if (ws.State == WebSocketState.Open)
-                ws.CloseAsync(WebSocketCloseStatus.NormalClosure, string.Empty, CancellationToken.None).GetAwaiter().GetResult();
+                ws.CloseAsync(WebSocketCloseStatus.NormalClosure, string.Empty, ct).GetAwaiter().GetResult();
         }
         catch { }
     }

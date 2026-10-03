@@ -1,11 +1,11 @@
 {
   "id": "nicojk",
   "name": "NicoJK",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "route": "nicojk",
   "entry": "NicoJkPlugin.dll",
-  "hostContractVersion": "1.1.5",
-  "sdkVersion": "1.1.5",
+  "hostContractVersion": "1.1.8",
+  "sdkVersion": "1.1.8",
   "kind": [
     "UI"
   ],
@@ -33,7 +33,8 @@
     "WriteLogs",
     "ReadSafePaths",
     "ReadViewerSessions",
-    "WriteVideoOverlay"
+    "WriteVideoOverlay",
+    "UseInternetAccess"
   ],
   "tags": [
     "official",

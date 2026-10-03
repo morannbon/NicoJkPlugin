@@ -1,5 +1,6 @@
 ﻿using System.Text;
 using System.Text.RegularExpressions;
+using TvAIrPlugin;
 
 namespace NicoJkPlugin;
 
@@ -23,18 +24,20 @@ internal sealed class RecordingSession : IAsyncDisposable
     private int _skippedPast;
     private int _skippedOld;
 
-    public RecordingSession(RecordingInfo info, int jk, PluginSettings settings, Action<CommentPublish> publish, Action<string> log, Action statusChanged)
+    public RecordingSession(RecordingInfo info, int jk, PluginSettings settings, ITvAirInternetAccessApi internetAccess, Action<CommentPublish> publish, Action<string> log, Action statusChanged)
     {
         _info = info;
         _jk = jk;
         _settings = settings;
         _publish = publish;
         _log = log;
-        _client = new NicoJkClient(jk, settings.RefugeUri, settings.BacklogCount, settings.DropForwardedComment, log, statusChanged);
+        _client = new NicoJkClient(jk, settings.RefugeUri, settings.BacklogCount, settings.DropForwardedComment, internetAccess, log, statusChanged);
         _client.CommentReceived += OnComment;
     }
 
     public NicoJkClientStatus Status => _client.Status;
+
+    public void NotifyInternetAccessChanged() => _client.NotifyInternetAccessChanged();
 
     public void Start()
     {

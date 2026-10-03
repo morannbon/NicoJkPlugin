@@ -1,4 +1,4 @@
-﻿using TvAIrPlugin.Assets;
+using TvAIrPlugin.Assets;
 using TvAIrPlugin.Bridge;
 using TvAIrPlugin.Data;
 using TvAIrPlugin.Events;
@@ -318,7 +318,7 @@ public sealed class RuntimeUiActionResult
     public string ErrorCode { get; set; } = string.Empty;
     public string Diagnostics { get; set; } = string.Empty;
     public IReadOnlyList<RuntimeUiPatch> UiPatches { get; set; } = Array.Empty<RuntimeUiPatch>();
-    /// <summary>Runtime UI Action後にHost管理Windowを再描画する正式な要求。</summary>
+    /// <summary>Runtime UI Action後に、RuntimeUiDefinition.Kindで特定される現在の表示surfaceを再描画する正式な要求。PageはWindowInstanceIdを要求せず、ToolWindowは現在のWindowContentを対象とする。</summary>
     public bool RefreshRequested { get; set; }
     /// <summary>再描画対象。contentのみを正式値とする。</summary>
     public string RefreshTarget { get; set; } = "content";
@@ -423,12 +423,15 @@ public interface ITvAirPluginRuntimeContext
     global::TvAIrPlugin.ITvAirChannelsApi Channels { get; }
     global::TvAIrPlugin.ITvAirTunersApi Tuners { get; }
     global::TvAIrPlugin.Viewers.ITvAirViewersApi Viewers { get; }
+    global::TvAIrPlugin.Viewers.ITvAirViewerReservationsApi ViewerReservations { get; }
     global::TvAIrPlugin.ITvAirTimedTextStreamsApi TimedTextStreams { get; }
     global::TvAIrPlugin.ITvAirBackupApi Backup { get; }
     global::TvAIrPlugin.ITvAirSettingsApi Settings { get; }
     global::TvAIrPlugin.ITvAirSystemApi System { get; }
     global::TvAIrPlugin.ITvAirLogsApi Logs { get; }
     global::TvAIrPlugin.ITvAirPluginsApi Plugins { get; }
+    global::TvAIrPlugin.ITvAirExternalLookupApi ExternalLookup { get; }
+    global::TvAIrPlugin.ITvAirInternetAccessApi InternetAccess { get; }
 }
 
 public interface ITvAirRuntimeCapabilityPlugin

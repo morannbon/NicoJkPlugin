@@ -19,6 +19,9 @@ public sealed record VideoOverlayTextElement(string ElementId, string Text, doub
 public sealed record VideoOverlayLayerState(string LayerId, long Revision, IReadOnlyList<VideoOverlayElement> Elements);
 public sealed record AddVideoOverlayElementsRequest(string SceneInstanceId, string LayerId, IReadOnlyList<VideoOverlayElement> Elements, long ExpectedGeneration, long? ExpectedRevision = null);
 public sealed record ClearVideoOverlayLayerRequest(string SceneInstanceId, string LayerId, long ExpectedGeneration, long? ExpectedRevision = null);
+// Close is resource release, not drawing. ExpectedGeneration identifies the scene lifecycle
+// being closed, but the Host must not require that generation to remain the viewer's active one.
+// Create/Add/Clear continue to require the active viewer generation.
 public sealed record CloseVideoOverlaySceneRequest(string SceneInstanceId, long ExpectedGeneration, long? ExpectedRevision = null);
 public sealed record VideoOverlaySceneListRequest(bool IncludeClosed = false);
 public sealed record VideoOverlaySceneSnapshot(VideoOverlaySceneState Scene, IReadOnlyList<VideoOverlayLayerState> Layers);
