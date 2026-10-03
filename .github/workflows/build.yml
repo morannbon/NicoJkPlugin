@@ -2,6 +2,12 @@ name: NicoJkPlugin Build Test
 
 on:
   workflow_dispatch:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -27,7 +33,7 @@ jobs:
         shell: pwsh
         run: |
           $source = "NicoJkPlugin\bin\${{ matrix.platform }}\Release\net8.0-windows"
-          $out = "package\${{ matrix.platform }}"
+          $out = "package\NicoJkPlugin_${{ github.ref_name }}_${{ matrix.platform }}"
 
           New-Item -ItemType Directory -Force -Path $out | Out-Null
           Copy-Item "$source\*" $out -Recurse -Force
@@ -39,9 +45,35 @@ jobs:
           Get-ChildItem $out -Recurse -Include *.pdb,*.lib,*.exp |
             Remove-Item -Force
 
+          $zip = "package\NicoJkPlugin_${{ matrix.platform }}.zip"
+          Compress-Archive -Path "$out\*" -DestinationPath $zip -Force
+
       - name: Upload user package
         uses: actions/upload-artifact@v4
         with:
           name: NicoJkPlugin-${{ matrix.platform }}-ready
-          path: package/${{ matrix.platform }}/
+          path: package/NicoJkPlugin_${{ matrix.platform }}.zip
           if-no-files-found: error
+
+  draft-release:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+
+      - name: Create draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ github.ref_name }}" \
+            release-assets/NicoJkPlugin-x64-ready/NicoJkPlugin_x64.zip \
+            release-assets/NicoJkPlugin-x86-ready/NicoJkPlugin_x86.zip \
+            --repo "${{ github.repository }}" \
+            --title "NicoJkPlugin ${{ github.ref_name }}" \
+            --notes "GitHub Actions automatic build test." \
+            --draft
