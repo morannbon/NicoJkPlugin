@@ -27,11 +27,12 @@ if($spec.Name -in @('AI-rhythm','AIrCon')) {
 }
 $deploy=$spec.Dll
 if($spec.Name -eq 'NicoJkPlugin') {
-    foreach($file in @('System.Text.Encoding.CodePages.dll','NicoJkPlugin.deps.json')) {
+    foreach($file in @('NicoJkPlugin.deps.json')) {
         Copy-Item -LiteralPath (Join-Path $bin $file) -Destination $out
     }
     $nugetRoot=if($env:NUGET_PACKAGES){$env:NUGET_PACKAGES}else{Join-Path $env:USERPROFILE '.nuget/packages'}
     $encodingPackage=Join-Path $nugetRoot 'system.text.encoding.codepages/8.0.0'
+    Copy-Item -LiteralPath (Join-Path $encodingPackage 'lib/net8.0/System.Text.Encoding.CodePages.dll') -Destination $out
     Copy-Item -LiteralPath (Join-Path $encodingPackage 'LICENSE.TXT') -Destination (Join-Path $out 'ENCODING_LICENSE.txt')
     Copy-Item -LiteralPath (Join-Path $encodingPackage 'THIRD-PARTY-NOTICES.TXT') -Destination (Join-Path $out 'ENCODING_THIRD_PARTY_NOTICES.txt')
     $manifest=Get-Content -LiteralPath (Join-Path $out 'plugin.json') -Raw | ConvertFrom-Json
