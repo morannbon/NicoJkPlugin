@@ -2,18 +2,55 @@ name: NicoJkPlugin Build
 
 on:
   workflow_dispatch:
+    inputs:
+      source_tag:
+        description: Published version tag to build
+        required: true
+        default: v1.0.4
   push:
     tags:
-      - "v*.*.*"
+      - 'v*.*.*'
 
 permissions:
-  contents: write
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
-  build-and-draft:
-    uses: morannbon/TvAIr-Actions/.github/workflows/reusable-build-release.yml@v1.0.1
-    with:
-      product_name: NicoJkPlugin
-      solution: NicoJkPlugin.sln
-      package_script: .github/scripts/package.ps1
-      platforms_json: '["x64","x86"]'
+  build:
+    runs-on: windows-2022
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [x64, x86]
+    steps:
+      - name: Checkout packaging tools
+        uses: actions/checkout@v4
+        with:
+          path: tools
+      - name: Checkout published source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_tag || github.ref }}
+          path: source
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+      - name: Build with zero warnings
+        shell: pwsh
+        working-directory: source
+        run: |
+          msbuild NicoJkPlugin.sln /restore /t:Rebuild /m /nr:false /p:Configuration=Release /p:Platform=${{ matrix.platform }} /p:TvAIrDeveloperDiagnostics=false /p:TvAirPluginDeveloperDiagnostics=false /p:AIrConDeveloperDiagnostics=false /p:AIrhythmDeveloperDiagnostics=false /p:CopyLocalLockFileAssemblies=true /warnaserror
+          if ($LASTEXITCODE -ne 0) { throw 'Release build failed or produced warnings' }
+      - name: Prepare binary package
+        shell: pwsh
+        env:
+          SOURCE_TAG: ${{ inputs.source_tag || github.ref_name }}
+        run: |
+          & ./tools/.github/scripts/package.ps1 -Platform '${{ matrix.platform }}' -RefName $env:SOURCE_TAG -SourceRoot ./source
+      - name: Upload verified package
+        uses: actions/upload-artifact@v4
+        with:
+          name: NicoJkPlugin-${{ matrix.platform }}-package
+          path: package/*.zip
+          if-no-files-found: error
